@@ -134,25 +134,26 @@ def rotate_piece(tile_points):
     while (collided == True):
         collided = False
         for e in range(0, 4):
-            if FIELD[rotated_points[e][1]*8+rotated_points[e][0]] != BLANK:
-                collided = True
-                for f in range(0, 4):
-                    if (rotated_points[e][0], rotated_points[e][1] - 1) == rotated_points[f]:
-                        rotated_points = [(p[0], p[1] - 1) for p in rotated_points]
-                        break
-                    elif (rotated_points[e][0] + 1, rotated_points[e][1]) == rotated_points[f]:
-                        rotated_points = [(p[0] + 1, p[1]) for p in rotated_points]
-                        break
-                    elif (rotated_points[e][0] - 1, rotated_points[e][1]) == rotated_points[f]:
-                        rotated_points = [(p[0] - 1, p[1]) for p in rotated_points]
-                        break
+            if rotated_points[e][1] >= 0 and rotated_points[e][1] <= 7:
+                if FIELD[rotated_points[e][1]*8+rotated_points[e][0]] != BLANK:
+                    collided = True
+                    for f in range(0, 4):
+                        if (rotated_points[e][0], rotated_points[e][1] - 1) == rotated_points[f]:
+                            rotated_points = [(p[0], p[1] - 1) for p in rotated_points]
+                            break
+                        elif (rotated_points[e][0] + 1, rotated_points[e][1]) == rotated_points[f]:
+                            rotated_points = [(p[0] + 1, p[1]) for p in rotated_points]
+                            break
+                        elif (rotated_points[e][0] - 1, rotated_points[e][1]) == rotated_points[f]:
+                            rotated_points = [(p[0] - 1, p[1]) for p in rotated_points]
+                            break
         loop_count += 1
         if loop_count == 6:
             return tile_points
     
     # Finally check again for tiles in bound
     for u in range(0, 4):
-        if rotated_points[u][0]<0 or rotated_points[u][0]>7:
+        if rotated_points[u][0]<0 or rotated_points[u][0]>7 or rotated_points[u][1]>7:
             return tile_points
         
     # If we get to this point, we passed all checks!
@@ -168,6 +169,11 @@ def game_over_handler(score):
             return
         hat.show_message(str(score), 0.15, (0, 255, 0))
     time.sleep(0.5)
+
+def pause():
+    while True:
+        if joystick_handler() == "middle":
+            return
     
 if __name__ == "__main__":
     score = 0
@@ -179,28 +185,35 @@ if __name__ == "__main__":
     curr_fall_time = 0.0
     rotate_timer = 0.0
     curr_rotate_time = 0.0
+    left_timer = 0.0
+    curr_left_time = 0.0
+    right_timer = 0.0
+    curr_right_time = 0.0
     piece_color = random.randint(0, 6)    
-    tile_points = init_tile_points(3, -5, piece_color)
+    tile_points = init_tile_points(3, -4, piece_color)
     landed = False
     random.shuffle(COLORS)
     ROTATE_DELAY = 0.1
+    SHIFT_DELAY = 0.1
+    SHIFT_ANGLE = 10.0
+    DOWN_ANGLE = 40.0
     
     # Game loop
     while True:
         
         # Set game level based on score
         if score <= 5000:
+            LAND_DELAY = 1.5
+            FALL_DELAY = 1.5
+        elif score <= 10000:
             LAND_DELAY = 1.25
             FALL_DELAY = 1.25
-        elif score <= 10000:
+        elif score <= 15000:
             LAND_DELAY = 1.0
             FALL_DELAY = 1.0
-        elif score <= 15000:
-            LAND_DELAY = 0.8
-            FALL_DELAY = 0.8
         elif score <= 20000:
-            LAND_DELAY = 0.7
-            FALL_DELAY = 0.7
+            LAND_DELAY = 0.75
+            FALL_DELAY = 0.75
         else:
             LAND_DELAY = 0.6
             FALL_DELAY = 0.6
@@ -225,7 +238,7 @@ if __name__ == "__main__":
                     FIELD, score_increase = score_handler(FIELD)
                     score += score_increase
                 piece_color = random.randint(0, 6)
-                tile_points = init_tile_points(3, -5, piece_color)
+                tile_points = init_tile_points(3, -4, piece_color)
                 landed = False
         else:
             land_timer = 0.0
@@ -242,19 +255,29 @@ if __name__ == "__main__":
         
         # Check if joystick is pressed/held
         direction = joystick_handler()
-        if direction == "left" and valid_shift(-1, tile_points):
-            dx = -1
-        elif direction == "right" and valid_shift(1, tile_points):
-            dx = 1
-        elif direction == "up":
-            rotate_timer = time.time() - curr_rotate_time
+        if ((hat.orientation["pitch"] >= SHIFT_ANGLE and hat.orientation["pitch"] <= 180.0) or direction == "left") and valid_shift(-1, tile_points):
+            left_timer += time.time() - curr_left_time
+            curr_left_time = time.time()
+            if left_timer > SHIFT_DELAY:
+                left_timer = 0.0
+                dx = -1
+        elif ((hat.orientation["pitch"] <= 360.0 - SHIFT_ANGLE and hat.orientation["pitch"] > 180.0) or direction == "right") and valid_shift(1, tile_points):
+            right_timer += time.time() - curr_right_time
+            curr_right_time = time.time()
+            if right_timer > SHIFT_DELAY:
+                right_timer = 0.0
+                dx = 1
+        elif direction == "middle":
+            rotate_timer += time.time() - curr_rotate_time
             curr_rotate_time = time.time()
             if rotate_timer > ROTATE_DELAY:
                 rotate_timer = 0.0
                 dy = 0
                 tile_points = rotate_piece(tile_points)
-        elif direction == "down" and (not landed):
+        elif ((hat.orientation["roll"] > DOWN_ANGLE and hat.orientation["roll"] < 180.0) or direction == "down") and (not landed):
             dy = 1
+        #elif direction == "middle":
+        #    pause()
             
         # Update tile points
         tile_points = update_tile_points(tile_points, dx, dy)
